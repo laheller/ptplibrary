@@ -79,3 +79,123 @@ I/System.out: waiting for acknowledge
 I/System.out: D5300
 I/System.out: Nikon Corporation
 ```
+## Using ptp/usb
+For usb connections you will have to implement PtpUsbEndpoints on your operating system. 
+An implementation for Android is not part of this project to keep the project independent from android.
+Here is how it could look like
+```Java
+public class AndroidUsbEndpoints implements PtpUsbEndpoints
+{
+	private static int DEFAULT_TIMEOUT = 10000;
+	private UsbDeviceConnection usbconnection;
+	private UsbInterface usbinterface;
+	private UsbEndpoint data_out, data_in, interrupt;
+	private int timeout;
+	
+	
+	public AndroidUsbEndpoints(UsbDeviceConnection usbconnection, UsbInterface usbinterface)
+	{
+		this.usbconnection = usbconnection;
+		this.usbinterface = usbinterface;
+		timeout = DEFAULT_TIMEOUT;
+	}
+	
+	public void initalize() throws InitFailException
+	{
+		if(!usbconnection.claimInterface(usbinterface, true))
+			throw new InitFailException(InitFailReason.ClaimFailed);
+		
+		if(usbinterface.getEndpointCount()<3)
+			throw new InitFailException(InitFailReason.NoEndpoints);
+		
+		for(int i=0; i<usbinterface.getEndpointCount(); i++)
+		{
+			UsbEndpoint ep = usbinterface.getEndpoint(i);
+			
+			boolean isout = ep.getDirection()==UsbConstants.USB_DIR_OUT;
+			boolean isbulk = ep.getType()==UsbConstants.USB_ENDPOINT_XFER_BULK;
+			
+			if(isout && isbulk)
+				data_out = ep;
+			if(!isout && isbulk)
+				data_in = ep;
+			if(!isbulk)
+				interrupt = ep;			
+		}
+		
+		if(data_out==null || data_in==null || interrupt==null)
+			throw new InitFailException(InitFailReason.NoEndpoints);
+	}
+	
+	public void release()
+	{
+		usbconnection.releaseInterface(usbinterface);
+	}
+	
+	public int controlTransfer(int requestType, int request, int value, int index, byte[] buffer)
+	{
+		return usbconnection.controlTransfer(requestType, request, value, index, buffer, buffer!=null?buffer.length:0, 1500);
+	}
+
+	public void setTimeOut(int to)
+	{
+		timeout = to>0?to:DEFAULT_TIMEOUT;
+	}
+	
+	public int writeDataOut(byte[] buffer, int length) throws SendDataException
+	{
+		int len = usbconnection.bulkTransfer(data_out, buffer, length, timeout);
+		if(len<0)
+			throw new SendDataException("senderror: len is "+len);
+		return len;
+	}
+	
+	public int readDataIn(byte[] buffer) throws ReceiveDataException
+	{
+		int len=0; 
+		while(len==0)		
+		  len = usbconnection.bulkTransfer(data_in, buffer, buffer!=null?buffer.length:0, timeout);
+		if(len<0)
+			throw new ReceiveDataException("receiveerror: len is "+len);
+		return len;
+	}
+	
+	public void readEvent(byte[] buffer, boolean bulk)
+	{		
+		if(bulk)
+			usbconnection.bulkTransfer(interrupt, buffer, buffer.length, 500);
+		else
+		{
+			UsbRequest req = new UsbRequest();
+			req.initialize(usbconnection, interrupt);		
+			ByteBuffer bbuffer = ByteBuffer.wrap(buffer);
+			req.queue(bbuffer, buffer.length);							
+			req = usbconnection.requestWait();
+			PtpLog.debug("received event");
+			if(req!=null)
+			{
+				PtpLog.debug("req != null");
+				PtpLog.debug(new Packet(bbuffer.array()).toString());
+			}	
+			else
+				PtpLog.debug("event is null");
+		}
+		
+	}
+	
+	public int getMaxPacketSizeOut()
+	{
+		return data_out.getMaxPacketSize();
+	}
+	
+	public int getMaxPacketSizeIn()
+	{
+		return data_in.getMaxPacketSize();
+	}
+	
+	public int getMaxPacketSizeInterrupt()
+	{
+		return interrupt.getMaxPacketSize();
+	}	
+}
+```
