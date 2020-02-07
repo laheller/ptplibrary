@@ -82,7 +82,8 @@ I/System.out: Nikon Corporation
 ## Using ptp/usb
 For usb connections you will have to implement PtpUsbEndpoints on your operating system. 
 An implementation for Android is not part of this project to keep the project independent from android.
-Here is how it could look like
+
+Here is how it could look like:
 ```Java
 public class AndroidUsbEndpoints implements PtpUsbEndpoints
 {
