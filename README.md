@@ -23,6 +23,7 @@ allprojects {
 ```
 
 ## Example usage
+Do not run this on mainthread otherwise you will get NetworkOnMainthreadException
 ```Java
             //this is only a test code
             //do not make try-catch-block around all your code
@@ -70,4 +71,11 @@ allprojects {
             {
                 e.printStackTrace();
             }
+```
+Output: 
+```
+I/System.out: start connect
+I/System.out: waiting for acknowledge
+I/System.out: D5300
+I/System.out: Nikon Corporation
 ```
